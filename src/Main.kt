@@ -1,3 +1,4 @@
+import kotlin.jvm.Throws
 import kotlin.math.PI
 import kotlin.math.pow
 
@@ -23,37 +24,52 @@ interface FigureService {
 object ConsoleServiceImpl: ConsoleService {
     private var active: Boolean = true
     override fun work() {
-        println("Введите тип операции, которую хотите исполнить:\n1) " +
-                "добавить фигуру\n2) получить площадь всех фигур\n3) " +
-                "получить периметр всех фигур\n4) завершить выполнение")
         while (active) {
-            val operation = readln().toInt()
-            when (operation) {
-                Operation.ADD.number -> addFigure()
-                Operation.GET_AREA.number -> figureService.getArea()
-                Operation.GET_PERIMETER.number -> figureService.getPerimeter()
-                Operation.FINISH.number -> active = false
+            println("Введите тип операции, которую хотите исполнить:\n1) " +
+                    "добавить фигуру\n2) получить площадь всех фигур\n3) " +
+                    "получить периметр всех фигур\n4) завершить выполнение")
+            try {
+                chooseOperation()
             }
+            catch (_: WrongOperationTypeException) {}
+        }
+    }
 
+    @Throws(WrongOperationTypeException::class)
+    private fun chooseOperation() {
+        val operation = readln()
+        when (operation) {
+            Operation.ADD.number -> addFigure()
+            Operation.GET_AREA.number -> println(figureService.getArea())
+            Operation.GET_PERIMETER.number -> println(figureService.getPerimeter())
+            Operation.FINISH.number -> active = false
+            else -> throw WrongOperationTypeException()
         }
     }
 
     private fun addFigure() {
-        println("Введите тип фигуры и через пробел необходимый размер(пример: Circle 5)")
-        val request = readln().split(" ")
-        when (request[0]) {
-            "Circle" -> figureService.addFigure(Circle(request[1].toDouble()))
-            "Square" -> figureService.addFigure(Square(request[1].toDouble()))
+        while (active) {
+            try {
+                println("Введите тип фигуры и через пробел необходимый размер(пример: Circle 5)")
+                val request = readln().split(" ")
+                when (request[0]) {
+                    "Circle" -> figureService.addFigure(Circle(request[1].toDouble()))
+                    "Square" -> figureService.addFigure(Square(request[1].toDouble()))
+                }
+                active = false
+            }
+            catch (_: BadPropertyException) {}
         }
+        active = true
     }
 }
 
 
-enum class Operation(val number: Int) {
-    ADD(1),
-    GET_AREA(2),
-    GET_PERIMETER(3),
-    FINISH(4)
+enum class Operation(val number: String) {
+    ADD("1"),
+    GET_AREA("2"),
+    GET_PERIMETER("3"),
+    FINISH("4")
 }
 
 
@@ -74,13 +90,14 @@ object FigureServiceImpl: FigureService {
 }
 
 
-abstract class Figure(property: Double) {
+abstract class Figure @Throws(BadPropertyException::class) constructor(property: Double) {
     init {
+        if (property < 0)
+            throw BadPropertyException()
         println("${this.javaClass.name}(property=${property})")
     }
 
     abstract var property: Double
-
     abstract fun getArea(): Double
     abstract fun getPerimeter(): Double
 }
@@ -104,5 +121,19 @@ private class Square(override var property: Double): Figure(property) {
 
     override fun getPerimeter(): Double {
         return property * 4
+    }
+}
+
+
+class BadPropertyException: Exception() {
+    init {
+        println("Некорректно задан размер фигуры")
+    }
+}
+
+
+class WrongOperationTypeException: Exception() {
+    init {
+        println("Данной операции не существует")
     }
 }
