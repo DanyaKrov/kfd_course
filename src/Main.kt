@@ -1,11 +1,11 @@
 fun main() {
     val mockClient = Client()
-    val response:Response = mockClient.perform(200, "OK").let {
+    val response = mockClient.perform(200, "OK").let {
         it.andExpect({it.responseMatchers.status { it.statusResponseMatchers.isOk() }},
             {it.responseMatchers.body { it.bodyResponseMatchers.isNotNull() }})
-        it.andDo { println(it.response)}
-        it.response
-    }
+            .andDo { response -> println(response) }
+    }.response
+    println(response.code)
 }
 
 
@@ -15,11 +15,11 @@ class ResponseActions(val code: Int, val body: String?) {
     val bodyResponseMatchers: BodyResponseMatchers = BodyResponseMatchers()
     val statusResponseMatchers: StatusResponseMatchers = StatusResponseMatchers()
 
-    fun andDo(callback: () -> Unit) {
-        TODO()
+    fun andDo(callback: (ResponseActions) -> Unit): ResponseActions {
+        return this
     }
-    fun andExpect(callback1: () -> Unit, callback2: () -> Unit) {
-        TODO()
+    fun andExpect(callback1: () -> Unit, callback2: () -> Unit): ResponseActions {
+        return this
     }
 
     class ResponseMatchers() {
