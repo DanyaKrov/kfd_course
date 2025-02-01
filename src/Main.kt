@@ -18,16 +18,26 @@ class ResponseActions(val code: Int, val body: String?) {
     val response: Response = Response(code, body)
 
 
-    fun andDo(callback: (Response) -> Unit): ResponseActions {
-        callback(response)
-        return this
-    }
-    fun andExpect(callback: ResponseMatchers.() -> Unit): ResponseActions {
-        callback(ResponseMatchers())
-        return this
-    }
+    fun andDo(callback: (Response) -> Unit): ResponseActions =
+        this.also { callback(response) }
+    fun andExpect(callback: ResponseMatchers.() -> Unit): ResponseActions =
+        this.also { callback(ResponseMatchers()) }
 
-    inner class ResponseMatchers() {
+    inner class ResponseMatchers {
+        inner class StatusResponseMatchers {
+            fun isOk() {
+                if (code != 200)
+                    throw StatusResponseMatchersException()
+            }
+            fun isBadRequest() {
+                if (code != 400)
+                    throw StatusResponseMatchersException()
+            }
+            fun isInternalServerError() {
+                if (code != 500)
+                    throw StatusResponseMatchersException()
+            }
+        }
 
         fun body(callback: BodyResponseMatchers.() -> Unit) {
             callback(BodyResponseMatchers())
@@ -38,7 +48,7 @@ class ResponseActions(val code: Int, val body: String?) {
         }
     }
 
-    inner class BodyResponseMatchers() {
+    inner class BodyResponseMatchers {
         fun isNull() {
             if (!body.isNullOrBlank())
                 throw BodyResponseMatchersException()
@@ -48,28 +58,13 @@ class ResponseActions(val code: Int, val body: String?) {
                 throw BodyResponseMatchersException()
         }
     }
-
-    inner class StatusResponseMatchers() {
-        fun isOk() {
-            if (code != 200)
-                throw StatusResponseMatchersException()
-        }
-        fun isBadRequest() {
-            if (code != 400)
-                throw StatusResponseMatchersException()
-        }
-        fun isInternalServerError() {
-            if (code != 500)
-                throw StatusResponseMatchersException()
-        }
-    }
 }
 
 
-sealed class ResponseMatchersException(message:String): Exception(message)
+sealed class ResponseMatchersException(message:String): RuntimeException(message)
 
 
-class StatusResponseMatchersException(): ResponseMatchersException("Ошибка запроса")
+class StatusResponseMatchersException: ResponseMatchersException("Ошибка запроса")
 
 
-class BodyResponseMatchersException(): ResponseMatchersException("Ошибка тела запроса")
+class BodyResponseMatchersException: ResponseMatchersException("Ошибка тела запроса")
