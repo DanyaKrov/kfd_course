@@ -1,55 +1,74 @@
 import java.util.LinkedList
 import java.util.concurrent.Executor
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
 
-class ThreadPool(threadCount: Int) : Executor {
-
-    var threadList: List<Thread> = (1..threadCount).map { Thread() }
-    var queueList: LinkedList<Runnable> = LinkedList()
-    private val exceptionHandler = Thread.UncaughtExceptionHandler { _: Thread, _ -> run {} }
-    private var isShutDown: Boolean = true
-    private var isActive: Boolean = true
-    private var addThreadLock = ReentrantLock()
+class ThreadPool(
+    threadCount: Int,
+): Executor {
+    private val isActive = AtomicBoolean(true)
+    private val threadList = mutableListOf<Thread>()
+    private val threadQueue = LinkedList<Runnable>()
+    private val locker = ReentrantLock()
+    private val condition: Condition = locker.newCondition()
 
     init {
-        val thread = Thread(ThreadExecutor())
-        thread.start()
-    }
-
-    inner class ThreadExecutor: Runnable {
-        override fun run() {
-            while (isActive) {
-                for(thread in threadList) {
-                    if (thread.state == Thread.State.NEW) { // Thread wasn't launched yet
-                        thread.start()
+        repeat(threadCount) {
+            threadList.add(
+                Thread {
+                    while (threadQueue.isNotEmpty() || isActive.get()) {
+                        val task =
+                            try {
+                                locker.lock()
+                                while (threadQueue.isEmpty() && isActive.get())
+                                    condition.await()
+                                if (threadQueue.isEmpty())
+                                    continue
+                                threadQueue.poll()
+                            }
+                            finally {
+                                locker.unlock()
+                            }
+                        try {
+                            task.run()
+                        }
+                        catch (_: Exception) {
+                            return@Thread
+                        }
                     }
-                    else if (addThreadLock.tryLock() && !queueList.isEmpty() && thread.state == Thread.State.TERMINATED) {
-                        threadList = threadList.minus(thread) + Thread(queueList[0]) // adding new in the place of executed one
-                        queueList.removeAt(0)
-                        addThreadLock.unlock()
-                    }
-                }
-            }
+                }.apply {start()})
         }
+    }
+    fun shutdown(wait: Boolean = true) {
+        isActive.set(false)
+        if (!wait)
+            threadList.forEach { it.interrupt() }
+        try {
+            locker.lock()
+            condition.signalAll()
+        }
+        finally {
+            locker.unlock()
+        }
+        threadList.forEach {
+            it.join()
+        }
+
     }
 
 
     override fun execute(command: Runnable) {
-        if (isShutDown)
-            queueList.add(command)
-        else // new threads cant be added after shutdown
-            throw RejectedExecutionException("ThreadPool was shutdown")
+        if (!isActive.get())
+            throw IllegalStateException("ThreadPool is shutdown")
+        locker.lock()
+        try {
+            threadQueue.add(command)
+            condition.signal()
+        }
+        finally {
+            locker.unlock()
+        }
     }
 
-    fun shutdown(wait: Boolean) {
-        isShutDown = false
-        if (wait)
-            return
-        for(thread in threadList) {
-            thread.setUncaughtExceptionHandler(exceptionHandler) // for Exceptions from interrupting Thread.sleep()
-            thread.interrupt()
-        }
-        isActive = false // killing thread running loop
-    }
 }
